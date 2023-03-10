@@ -23,13 +23,7 @@ type ClientConfig struct {
 	AllowInsecureServerCert bool
 }
 
-const (
-	Silent = iota
-	Info
-	Debug
-)
-
-var logLevel = Debug
+var clientLogLevel = Debug
 
 func clientProcess(clientConn net.Conn, config ClientConfig) {
 
@@ -50,7 +44,7 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 		}
 		return
 	}
-	if logLevel == Debug {
+	if clientLogLevel == Debug {
 		log.Printf("clientProcess::connect to remote %s:%d\n", config.RemoteAddr, config.RemotePort)
 	}
 
@@ -64,7 +58,7 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 		go func() {
 			defer wg.Done()
 			n, _ := io.Copy(right, left)
-			if logLevel == Debug {
+			if clientLogLevel == Debug {
 				log.Printf("relay::forwarded %d bytes client<-serv\n", n)
 			}
 			err := right.SetReadDeadline(time.Now().Add(wait))
@@ -73,7 +67,7 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 			}
 		}()
 		n, err := io.Copy(left, right)
-		if logLevel == Debug {
+		if clientLogLevel == Debug {
 			log.Printf("relay::forwarded %d bytes client->serv\n", n)
 		}
 		err = left.SetReadDeadline(time.Now().Add(wait))
@@ -94,12 +88,12 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 		if err != nil {
 			log.Printf("relay::failed to close conn with server at %s: %v\n", left.RemoteAddr().String(), err)
 		}
-		if logLevel >= Info {
+		if clientLogLevel >= Info {
 			log.Printf("relay::closed conn with server at %s\n", left.RemoteAddr().String())
 		}
 
 		err = right.Close()
-		if logLevel >= Info {
+		if clientLogLevel >= Info {
 			log.Printf("relay::closed conn with client at %s\n", right.RemoteAddr().String())
 		}
 		if err != nil {
@@ -116,7 +110,7 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 	}()
 
 	clientWg.Wait()
-	if logLevel != Silent {
+	if clientLogLevel != Silent {
 		log.Println("clientProcess::finished client process and connections all closed")
 	}
 }
@@ -137,7 +131,7 @@ func ClientLoop(listen net.Listener, config ClientConfig) {
 		if err != nil {
 			panic(err)
 		}
-		if logLevel >= Info {
+		if clientLogLevel >= Info {
 			log.Printf("ClientLoop::accepted from %s\n", conn.RemoteAddr().String())
 		}
 		// 启动一个单独的 goroutine 去处理连接
@@ -151,7 +145,7 @@ func main() {
 	localPort := flag.Int("localPort", 48620, "Port that groxy client listen on")
 	remotePort := flag.Int("remotePort", 38620, "Port that groxy server listen on")
 	insecureCertAllowed := flag.Bool("insecureCert", true, "Is insecure cert (self-signed cert) allowed on serverside")
-	logLevel = *flag.Int("logLevel", 3, "Log verbosity, 1~3 from low to high")
+	clientLogLevel = *flag.Int("logLevel", 3, "Log verbosity, 1~3 from low to high")
 	flag.Parse()
 
 	ipReg := `^((0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\.){3}(0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])$`
