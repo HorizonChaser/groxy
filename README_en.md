@@ -1,24 +1,22 @@
-# groxy: 使用 Go 与 TLS 实现的 TCP 代理
+# groxy: a TCP proxy encrypted with TLS in Golang
 
-[English README](README_en.md)
+groxy is a simple transparent TCP proxy encrypted by TLS. It can create a tunnel between client and server side, data in which would be protected by TLS.
 
-groxy 是一个简单的使用 TLS 加密的 TCP 代理, 它会在服务器端与客户端之间建立一条隧道, 这之间传输的数据通过 TLS 进行保护.
+The server side and client side groxy will each expose one port for applications wishing to use to connect with.
 
-服务器端与客户端各自对外暴露一个端口供外层的应用程序连接.
+## Current Progress
 
-## 当前的进度
+- [x] Implement TCP tunnel
+- [ ] Support SOCKS5 proxy
+- [ ] Support HTTP proxy (not likely to be implemented)
+- [ ] Capture and forward all TCP traffic on client side
+  - possibly implemented by using TUN device and route table hooking
+- [ ] Use a connection pool to optimize performance
+- [ ] Benchmark
 
-- [x] TCP 连接隧道的实现 
-- [ ] 支持 SOCKS5 代理
-- [ ] 支持 HTTP 代理 (很可能不会实现)
-- [ ] 捕获客户端所有 TCP 流量
-  - 可能使用 TUN 配合路由表劫持
-- [ ] 使用连接池提高性能
-- [ ] 性能测试
+## Usage
 
-## 使用
-
-### 客户端
+## Client Side
 
 ```shell
 ./groxy_client --help
@@ -37,7 +35,7 @@ Usage of groxy_client:
         Port that groxy server listen on (default 38620)
 ```
 
-### 服务器端
+## Server Side
 
 ```shell
 ./groxy_server --help
@@ -58,19 +56,19 @@ Usage of groxy_server:
   -v    Enable verbose output (default true)
 ```
 
-注意证书需要是 pem 格式
+To be noticed that the certificate should be in `pem` format.
 
-仅供参考: 
+For reference:
 
-使用 `openssl` 生成私钥  
+Using `openssl` to create private key
 
 `openssl genrsa -out server.key 2048`
 
-生成证书  
+Generating certificate
 
 `openssl req -new -x509 -key server.key -out server.pem -days 3650`
 
-## 构建
+## Build
 
 ```shell
 git clone github.com/HorizonChaser/groxy
@@ -78,9 +76,9 @@ cd groxy
 go env -w GOOS=windows
 go env -w GOARCH=amd64
 
-#构建服务端
+#Server side
 go build ./groxy_server.go ./common_def.go
 
-#构建客户端
+#Client side
 go build ./groxy_client.go ./common_def.go
 ```
