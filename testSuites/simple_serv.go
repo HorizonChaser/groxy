@@ -111,6 +111,7 @@ func handleConn(conn net.Conn) {
 			return
 		}
 		println(string(read))
+		//TODO remove '\n' at end of read byte[]
 		conn.Write([]byte("wow, I received " + string(read) + " from you!\n"))
 	}
 }

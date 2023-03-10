@@ -27,18 +27,23 @@ func main() {
 
 func ConnectAndAuthSocks5Client(client net.Conn) error {
 	if err := Socks5Auth(client); err != nil {
-		client.Close()
+		err := client.Close()
+		if err != nil {
+			return err
+		}
 		return err
 	}
 
 	target, err := Socks5Connect(client)
 	if err != nil {
-		client.Close()
+		err := client.Close()
+		if err != nil {
+			return err
+		}
 		return err
 	}
 
 	Socks5Forward(client, target)
-
 	return nil
 }
 
