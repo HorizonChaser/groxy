@@ -63,13 +63,19 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err1 = io.Copy(right, left)
+			n, _ := io.Copy(right, left)
+			if logLevel == Debug {
+				log.Printf("relay::forwarded %d bytes client<-serv\n", n)
+			}
 			err := right.SetReadDeadline(time.Now().Add(wait))
 			if err != nil {
 				log.Printf("relay::failed to set read deadline for right @ %s: %v\n", right.RemoteAddr().String(), err)
 			}
 		}()
-		_, err = io.Copy(left, right)
+		n, err := io.Copy(left, right)
+		if logLevel == Debug {
+			log.Printf("relay::forwarded %d bytes client->serv\n", n)
+		}
 		err = left.SetReadDeadline(time.Now().Add(wait))
 		if err != nil {
 			log.Printf("relay::failed to set read deadline for left @ %s: %v\n", right.RemoteAddr().String(), err)
@@ -88,10 +94,14 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 		if err != nil {
 			log.Printf("relay::failed to close conn with server at %s: %v\n", left.RemoteAddr().String(), err)
 		}
-		log.Printf("relay::closed conn with server at %s\n", left.RemoteAddr().String())
+		if logLevel >= Info {
+			log.Printf("relay::closed conn with server at %s\n", left.RemoteAddr().String())
+		}
 
 		err = right.Close()
-		log.Printf("relay::closed conn with client at %s\n", right.RemoteAddr().String())
+		if logLevel >= Info {
+			log.Printf("relay::closed conn with client at %s\n", right.RemoteAddr().String())
+		}
 		if err != nil {
 			log.Printf("relay::failed to close conn with client at %s: %v\n", right.RemoteAddr().String(), err)
 		}
@@ -106,7 +116,9 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 	}()
 
 	clientWg.Wait()
-	log.Println("clientProcess::finished client process and connections all closed")
+	if logLevel != Silent {
+		log.Println("clientProcess::finished client process and connections all closed")
+	}
 }
 
 func ClientInit(config ClientConfig) (net.Listener, error) {

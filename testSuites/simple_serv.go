@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -108,11 +109,11 @@ func handleConn(conn net.Conn) {
 		_, err = conn.Read(read)
 		if err != nil {
 			log.Println("reached waiting limit")
+			conn.Write([]byte("See you again!\n"))
 			return
 		}
-		println(string(read))
-		//TODO remove '\n' at end of read byte[]
-		conn.Write([]byte("wow, I received " + string(read) + " from you!\n"))
+		log.Printf("handleConn::received %s    from %s\n", read, conn.RemoteAddr().String())
+		conn.Write([]byte("wow, I received " + string(bytes.TrimSpace(read)) + " from you!\n"))
 	}
 }
 
