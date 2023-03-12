@@ -9,7 +9,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -51,13 +50,11 @@ func main() {
 		RemotePort:  *remotePort,
 	}
 
-	ipReg := `^((0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\.){3}(0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])$`
-	r, _ := regexp.Compile(ipReg)
-	if !r.MatchString(*localAddr) {
+	if !IsValidIPv4Address(*localAddr) {
 		fmt.Printf("Incorrect IP address for localAddr: %s\nExpected: Valid IPv4 address", *localAddr)
 		return
 	}
-	if !r.MatchString(*remoteAddr) {
+	if !IsValidIPv4Address(*remoteAddr) {
 		fmt.Printf("Incorrect IP address for remoteAddr: %s\nExpected: Valid IPv4 address", *localAddr)
 		return
 	}
@@ -85,6 +82,7 @@ func main() {
 	}
 
 	remoteConn, err := RemoteApplicationInit(config)
+	defer remoteConn.Close()
 	if err != nil {
 		panic(err)
 	}
@@ -158,16 +156,16 @@ func HandleClient(clientConn, remoteConn net.Conn) {
 			defer wg.Done()
 			n, _ := io.Copy(right, left)
 			if servLogLevel == Debug {
-				log.Printf("relay::forwarded %d bytes serv\n", n)
+				log.Printf("relay::forwarded %d bytes client->remote\n", n)
 			}
-			err := right.SetReadDeadline(time.Now().Add(wait))
-			if err != nil {
-				log.Printf("relay::failed to set read deadline for right @ %s: %v\n", right.RemoteAddr().String(), err)
-			}
+			//err = right.SetReadDeadline(time.Now().Add(wait))
+			//if err != nil {
+			//	log.Printf("relay::failed to set read deadline for right @ %s: %v\n", right.RemoteAddr().String(), err)
+			//}
 		}()
 		n, err := io.Copy(left, right)
 		if servLogLevel == Debug {
-			log.Printf("relay::forwarded %d bytes client->serv\n", n)
+			log.Printf("relay::forwarded %d bytes remote->client (err=:%s)\n", n, err)
 		}
 		err = left.SetReadDeadline(time.Now().Add(wait))
 		if err != nil {
@@ -185,14 +183,10 @@ func HandleClient(clientConn, remoteConn net.Conn) {
 
 		err = left.Close()
 		if err != nil {
-			log.Printf("relay::failed to close conn with server at %s: %v\n", left.RemoteAddr().String(), err)
+			log.Printf("relay::failed to close conn with client at %s: %v\n", left.RemoteAddr().String(), err)
 		} else {
 			log.Println("relay::disconnected from client")
 		}
-		if servLogLevel >= Info {
-			log.Printf("relay::closed conn with server at %s\n", left.RemoteAddr().String())
-		}
-
 		return nil
 	}
 

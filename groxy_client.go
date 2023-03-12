@@ -9,7 +9,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -148,13 +147,11 @@ func main() {
 	clientLogLevel = *flag.Int("logLevel", 3, "Log verbosity, 1~3 from low to high")
 	flag.Parse()
 
-	ipReg := `^((0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])\.){3}(0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])$`
-	r, _ := regexp.Compile(ipReg)
-	if !r.MatchString(*localAddr) {
+	if !IsValidIPv4Address(*localAddr) {
 		fmt.Printf("Incorrect IP address for localAddr: %s\nExpected: Valid IPv4 address", *localAddr)
 		return
 	}
-	if !r.MatchString(*remoteAddr) {
+	if !IsValidIPv4Address(*remoteAddr) {
 		fmt.Printf("Incorrect IP address for remoteAddr: %s\nExpected: Valid IPv4 address", *localAddr)
 		return
 	}

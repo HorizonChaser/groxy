@@ -15,7 +15,7 @@ import (
 )
 
 func tcpServ() {
-	listen, err := net.Listen("tcp4", "127.0.0.1:38620")
+	listen, err := net.Listen("tcp4", "127.0.0.1:55590")
 	if err != nil {
 		panic(err)
 	}
@@ -32,6 +32,27 @@ func tcpServ() {
 			log.Printf("Served geusts at %s\n", conn.LocalAddr().String())
 		}(conn)
 
+	}
+}
+
+func tcpEcho() {
+	conn, err := net.Dial("tcp4", "127.0.0.1:55590")
+	log.Println("connected with groxy server from ", conn.LocalAddr().String())
+	if err != nil {
+		panic(err)
+	}
+
+	for true {
+		read := make([]byte, 64*1024)
+		//conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		_, err := conn.Read(read)
+		if err != nil {
+			return
+		}
+		_, err = conn.Write([]byte("echoing"))
+		if err != nil {
+			return
+		}
 	}
 }
 
@@ -71,7 +92,7 @@ func tlsServ() {
 	log.Printf("Simple TLS server started with cert containing\n%v\n", certInfo)
 
 	config := &tls.Config{Certificates: []tls.Certificate{cert}}
-	ln, err := tls.Listen("tcp4", ":38620", config)
+	ln, err := tls.Listen("tcp4", ":55590", config)
 	if err != nil {
 		log.Println(err)
 		return
@@ -126,6 +147,11 @@ func main() {
 	}
 	if *mode == "tcp" {
 		tcpServ()
+	}
+	if *mode == "tcpEcho" {
+		for true {
+			tcpEcho()
+		}
 	}
 
 }
