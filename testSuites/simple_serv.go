@@ -30,6 +30,16 @@ func tcpServ() {
 			defer conn.Close()
 			conn.Write([]byte("Hellowww\n"))
 			log.Printf("Served geusts at %s\n", conn.LocalAddr().String())
+			read := make([]byte, 64)
+			//conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+			_, err := conn.Read(read)
+			if err != nil {
+				return
+			}
+			_, err = conn.Write([]byte("wow, I received " + string(bytes.TrimSpace(read)) + " from you!\n"))
+			if err != nil {
+				return
+			}
 		}(conn)
 
 	}

@@ -16,7 +16,7 @@ import (
 
 var servLogLevel = Debug
 
-func main() {
+func parseServerCArgs() *ServerConfig {
 	localAddr := flag.String("localAddr", "127.0.0.1", "Address that this groxy server will listen at")
 	localPort := flag.Int("localPort", 38620, "Port that this groxy server will listen on")
 	certFile := flag.String("cert", "server.pem", "Certificate file that TLS requires, in PEM format")
@@ -41,63 +41,25 @@ func main() {
 
 	if !IsValidIPv4Address(*localAddr) {
 		fmt.Printf("Incorrect IP address for localAddr: %s\nExpected: Valid IPv4 address", *localAddr)
-		return
+		return nil
 	}
 	if !IsValidIPv4Address(*remoteAddr) {
 		fmt.Printf("Incorrect IP address for remoteAddr: %s\nExpected: Valid IPv4 address", *localAddr)
-		return
+		return nil
 	}
 	if *localPort <= 0 || *localPort >= 65536 {
 		fmt.Printf("Invalid port for localPort: %d\nExpected: Valid port in [1,65535]", *localPort)
-		return
+		return nil
 	}
 	if *remotePort <= 0 || *remotePort >= 65536 {
 		fmt.Printf("Invalid port for localPort: %d\nExpected: Valid port in [1,65535]", *localPort)
-		return
+		return nil
 	}
 
-	//set clientLogLevel
-	if *isDebug {
-		servLogLevel = Debug
-	} else if *isVerbose {
-		servLogLevel = Info
-	} else {
-		servLogLevel = Silent
-	}
-
-	log.Println("groxy server started")
-	if servLogLevel == Debug {
-		log.Println("with args: ", config)
-	}
-
-	remoteConn, err := RemoteApplicationInit(config)
-	defer remoteConn.Close()
-	if err != nil {
-		panic(err)
-	}
-
-	ServerInit(remoteConn, config)
+	return &config
 }
 
-func RemoteApplicationInit(config ServerConfig) (net.Conn, error) {
-	listen, err := net.Listen("tcp4", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort))
-	if err != nil {
-		return nil, err
-	}
-	if servLogLevel >= Info {
-		log.Println("RemoteApplicationInit::started listening at ", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort))
-	}
-	conn, err := listen.Accept()
-	if err != nil {
-		log.Fatal("RemoteApplicationInit::failed to connect to remote app: ", err)
-	}
-	if servLogLevel >= Silent {
-		log.Printf("RemoteApplicationInit::connected to remote app at %s\n", conn.RemoteAddr().String())
-	}
-	return conn, nil
-}
-
-func ServerInit(remoteConn net.Conn, config ServerConfig) {
+func ServerDconnInit(config ServerConfig) {
 	cert, err := tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
 	if err != nil {
 		panic(err)
@@ -109,13 +71,6 @@ func ServerInit(remoteConn net.Conn, config ServerConfig) {
 		panic("ServerInit::failed to TLS listen: " + err.Error())
 	}
 
-	defer func(clientListen net.Listener) {
-		err := clientListen.Close()
-		if err != nil {
-			log.Println(err)
-		}
-	}(clientListen)
-
 	for true {
 		clientConn, err := clientListen.Accept()
 		if err != nil {
@@ -125,12 +80,36 @@ func ServerInit(remoteConn net.Conn, config ServerConfig) {
 		if servLogLevel >= Info {
 			log.Println("ServerInit::accepted a client from ", clientConn.RemoteAddr().String())
 		}
-		go handleClient(clientConn, remoteConn)
+		go handleClientDconn(clientConn, config)
 	}
 
 }
 
-func handleClient(clientConn, remoteConn net.Conn) {
+func handleClientDconn(clientConn net.Conn, config ServerConfig) {
+
+	remoteConn, err := net.Dial("tcp4", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort))
+	if err != nil {
+		err1 := clientConn.Close()
+		log.Printf("handleClientDconn::failed to connect to remote app: %s\n", err)
+		if err1 != nil {
+			log.Printf("During failed to connect to remote, we also failed to close client conn: %s\n", err1)
+		}
+		return
+	}
+	defer func(remoteConn net.Conn) {
+		err := remoteConn.Close()
+		if err != nil {
+			log.Printf("failed to close remote conn: %s\n", err)
+		}
+	}(remoteConn)
+
+	defer func(clientConn net.Conn) {
+		err := clientConn.Close()
+		if err != nil && err.Error() != "use of closed network connection" {
+			log.Printf("failed to close client conn: %s\n", err)
+		}
+	}(clientConn)
+
 	var serverWg sync.WaitGroup
 	serverWg.Add(1)
 
@@ -182,12 +161,23 @@ func handleClient(clientConn, remoteConn net.Conn) {
 	go func() {
 		err := relay(clientConn, remoteConn)
 		if err != nil {
-			log.Println("HandleClient::unexpected err from relay(): ", err)
+			log.Println("handleClient::unexpected err from relay(): ", err)
 		}
 	}()
 
 	serverWg.Wait()
 	if servLogLevel >= Info {
-		log.Println("HandleClient::finished client process and closed")
+		log.Println("handleClient::finished client process and closed")
 	}
+}
+
+func main() {
+	PrintServerWelcomeMsg("0.3.0-dev")
+	serverConfig := parseServerCArgs()
+
+	log.Print("server started with args= ")
+	log.Printf("%#v\n", *serverConfig)
+
+	ServerDconnInit(*serverConfig)
+
 }

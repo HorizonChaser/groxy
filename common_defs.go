@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/logrusorgru/aurora/v4"
 	"regexp"
 	"runtime"
 	"strings"
@@ -35,4 +36,21 @@ func GetCurrFuncFileAndLine() (fileName string, funcName string, lineNo int) {
 	lineNo = frame.Line
 
 	return
+}
+
+func PrintServerWelcomeMsg(version string) {
+	msg := "Horizon Groxy Server"
+	fmt.Print(aurora.Cyan(msg))
+	fmt.Println(aurora.Sprintf(aurora.Magenta(" version %s\n"), aurora.Magenta(version)))
+}
+
+type ServerConfig struct {
+	LocalAddr   string
+	LocalPort   int
+	RemoteAddr  string
+	RemotePort  int
+	CertFile    string
+	KeyFile     string
+	IsVerbose   bool
+	IsDebugging bool
 }
