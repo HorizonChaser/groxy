@@ -84,3 +84,47 @@ go build ./groxy_server.go ./common_def.go
 #构建客户端
 go build ./groxy_client.go ./common_def.go
 ```
+
+## 压力测试
+
+### gin + https
+
+```plain
+Server Software:
+Server Hostname:        127.0.0.1
+Server Port:            55590
+SSL/TLS Protocol:       TLSv1.2,ECDHE-RSA-AES128-GCM-SHA256,2048,128
+Server Temp Key:        X25519 253 bits
+
+Document Path:          /test
+Document Length:        20 bytes
+
+Concurrency Level:      1000
+Time taken for tests:   12.128 seconds
+Complete requests:      10000
+Failed requests:        0
+Total transferred:      1370000 bytes
+HTML transferred:       200000 bytes
+Requests per second:    824.52 [#/sec] (mean)
+Time per request:       1212.832 [ms] (mean)
+Time per request:       1.213 [ms] (mean, across all concurrent requests)
+Transfer rate:          110.31 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        4  813 274.6    701    1257
+Processing:   110  356 192.3    324     941
+Waiting:        0  171  84.2    141     849
+Total:        594 1169 293.9   1307    1918
+
+Percentage of the requests served within a certain time (ms)
+  50%   1307
+  66%   1395
+  75%   1402
+  80%   1405
+  90%   1477
+  95%   1490
+  98%   1909
+  99%   1911
+ 100%   1918 (longest request)
+```

@@ -8,9 +8,14 @@ import (
 	"encoding/pem"
 	"flag"
 	"fmt"
+	"github.com/gin-gonic/gin"
+	"github.com/unrolled/secure"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -30,18 +35,67 @@ func tcpServ() {
 			defer conn.Close()
 			conn.Write([]byte("Hellowww\n"))
 			log.Printf("Served geusts at %s\n", conn.LocalAddr().String())
-			read := make([]byte, 64)
-			//conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-			_, err := conn.Read(read)
-			if err != nil {
-				return
-			}
-			_, err = conn.Write([]byte("wow, I received " + string(bytes.TrimSpace(read)) + " from you!\n"))
-			if err != nil {
-				return
+			for true {
+				read := make([]byte, 256)
+				err := conn.SetReadDeadline(time.Now().Add(20 * time.Millisecond))
+				if err != nil {
+					return
+				}
+				_, err = conn.Read(read)
+				if err != nil {
+					return
+				}
+				_, err = conn.Write([]byte("wow, I received " + string(bytes.TrimSpace(read)) + " from you!\n"))
+				if err != nil {
+					return
+				}
 			}
 		}(conn)
 
+	}
+}
+
+func httpServ() {
+	gin.SetMode(gin.ReleaseMode)
+	gin.DefaultWriter = io.Discard
+	// 启动gin框架，采用默认配置
+	router := gin.Default()
+
+	// 编写匿名的handler函数
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "hello,world",
+		})
+	})
+	router.Run("localhost:55590") // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
+}
+
+func httpsServ() error {
+	gin.SetMode(gin.ReleaseMode)
+	gin.DefaultWriter = io.Discard
+	r := gin.Default()
+	r.GET("/", func(c *gin.Context) {
+		c.String(200, "test for 【%s】", "https")
+	})
+	r.Use(tlsHandler(55590))
+
+	return r.RunTLS("localhost:"+strconv.Itoa(55590), "./server.pem", "./server.key")
+}
+
+func tlsHandler(port int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		secureMiddleware := secure.New(secure.Options{
+			SSLRedirect: true,
+			SSLHost:     ":" + strconv.Itoa(port),
+		})
+		err := secureMiddleware.Process(c.Writer, c.Request)
+
+		// If there was an error, do not continue.
+		if err != nil {
+			return
+		}
+
+		c.Next()
 	}
 }
 
@@ -153,14 +207,29 @@ func main() {
 	flag.Parse()
 
 	if *mode == "tls" {
+		log.Println("started tls server")
 		tlsServ()
 	}
 	if *mode == "tcp" {
+		log.Println("started tcp listen server")
 		tcpServ()
 	}
 	if *mode == "tcpEcho" {
+		log.Println("started tcp echo server")
 		for true {
 			tcpEcho()
+		}
+	}
+	if *mode == "http" {
+		log.Println("started HTTP listen server")
+		httpServ()
+	}
+	if *mode == "https" {
+		log.Println("started HTTPS listen server")
+		err := httpsServ()
+		if err != nil {
+			log.Println(err)
+			return
 		}
 	}
 

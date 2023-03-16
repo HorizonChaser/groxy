@@ -54,3 +54,13 @@ type ServerConfig struct {
 	IsVerbose   bool
 	IsDebugging bool
 }
+
+type ClientConfig struct {
+	LocalAddr               string
+	LocalPort               int
+	RemoteAddr              string
+	RemotePort              int
+	AllowInsecureServerCert bool
+	IsVerbose               bool
+	IsDebugging             bool
+}

@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-var servLogLevel = Debug
+var servLogLevel = Silent
 
 func parseServerCArgs() *ServerConfig {
 	localAddr := flag.String("localAddr", "127.0.0.1", "Address that this groxy server will listen at")
@@ -118,7 +118,7 @@ func handleClientDconn(clientConn net.Conn, config ServerConfig) {
 
 		var err, err1 error
 		var wg sync.WaitGroup
-		var wait = 500 * time.Millisecond
+		var wait = 10 * time.Millisecond
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

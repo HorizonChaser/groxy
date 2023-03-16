@@ -139,7 +139,7 @@ func handleClient(clientConn, remoteConn net.Conn) {
 
 		var err, err1 error
 		var wg sync.WaitGroup
-		var wait = 500 * time.Millisecond
+		var wait = 100 * time.Millisecond
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
