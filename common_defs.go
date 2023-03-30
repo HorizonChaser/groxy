@@ -8,6 +8,21 @@ import (
 	"strings"
 )
 
+type LogLevel int
+type ServerMode int
+type ClientMode int
+
+const (
+	Dynamic = iota
+	Legacy
+)
+
+const (
+	Raw = iota
+	Socks55
+	HTTP
+)
+
 const (
 	Silent = iota
 	Info
@@ -38,21 +53,23 @@ func GetCurrFuncFileAndLine() (fileName string, funcName string, lineNo int) {
 	return
 }
 
-func PrintServerWelcomeMsg(version string) {
-	msg := "Horizon Groxy Server"
+func PrintServerWelcomeMsg(msg string, version string) {
 	fmt.Print(aurora.Cyan(msg))
 	fmt.Println(aurora.Sprintf(aurora.Magenta(" version %s\n"), aurora.Magenta(version)))
 }
 
 type ServerConfig struct {
-	LocalAddr   string
-	LocalPort   int
-	RemoteAddr  string
-	RemotePort  int
-	CertFile    string
-	KeyFile     string
-	IsVerbose   bool
-	IsDebugging bool
+	LocalAddr  string
+	LocalPort  int
+	RemoteAddr string
+	RemotePort int
+	CertFile   string
+	KeyFile    string
+
+	LogLevel   LogLevel
+	IsMTLS     bool
+	CACert     string
+	ServerMode ServerMode
 }
 
 type ClientConfig struct {
@@ -61,6 +78,11 @@ type ClientConfig struct {
 	RemoteAddr              string
 	RemotePort              int
 	AllowInsecureServerCert bool
-	IsVerbose               bool
-	IsDebugging             bool
+	CertFile                string
+	KeyFile                 string
+
+	LogLevel   LogLevel
+	IsMTLS     bool
+	CACert     string
+	ClientMode ClientMode
 }

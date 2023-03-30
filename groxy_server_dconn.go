@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
@@ -14,6 +15,18 @@ import (
 	"time"
 )
 
+/*
+notes about differences between .key, .pem and .crt files
+
+.key files are generally the private key, used by the server to encrypt and package data for verification by clients.
+
+.pem files are generally the public key, used by the client to verify and decrypt data sent by servers. PEM files could also be encoded private keys, so check the content if you're not sure.
+
+.p12 files have both halves of the key embedded, so that administrators can easily manage halves of keys.
+
+.cert or .crt files are the signed certificates -- basically the "magic" that allows certain sites to be marked as trustworthy by a third party.
+*/
+
 var servLogLevel = Silent
 
 func parseServerCArgs() *ServerConfig {
@@ -21,22 +34,35 @@ func parseServerCArgs() *ServerConfig {
 	localPort := flag.Int("localPort", 38620, "Port that this groxy server will listen on")
 	certFile := flag.String("cert", "server.pem", "Certificate file that TLS requires, in PEM format")
 	keyFile := flag.String("key", "server.key", "Key file for TLS encryption")
-	isVerbose := flag.Bool("v", true, "Enable verbose output")
-	isDebug := flag.Bool("d", true, "Enable debug level output")
 	remoteAddr := flag.String("remoteAddr", "127.0.0.1", "Address that remote application exists")
 	remotePort := flag.Int("remotePort", 55590, "Port that remote application exists")
+	servLogLevel := *flag.Int("logLevel", 2, "Logging level from 0 (quite) to 2 (debug)")
+	isMTLS := flag.Bool("mtls", false, "Is mTLS enabled")
+	serverMode := flag.String("serverMode", "dynamic", "Server Mode (dynamic or legacy)")
+	caCert := flag.String("cacert", "ca.crt", "CA cert used in mTLS mode")
 
 	flag.Parse()
 
 	config := ServerConfig{
-		LocalAddr:   *localAddr,
-		LocalPort:   *localPort,
-		CertFile:    *certFile,
-		KeyFile:     *keyFile,
-		IsVerbose:   *isVerbose,
-		IsDebugging: *isDebug,
-		RemoteAddr:  *remoteAddr,
-		RemotePort:  *remotePort,
+		LocalAddr:  *localAddr,
+		LocalPort:  *localPort,
+		CertFile:   *certFile,
+		KeyFile:    *keyFile,
+		LogLevel:   LogLevel(servLogLevel),
+		RemoteAddr: *remoteAddr,
+		RemotePort: *remotePort,
+		IsMTLS:     *isMTLS,
+		CACert:     *caCert,
+	}
+
+	switch *serverMode {
+	case "legacy":
+		config.ServerMode = Legacy
+	case "dynamic":
+		config.ServerMode = Dynamic
+	default:
+		fmt.Printf("Incorrect value for serverMode: %s\nExpected: dynamic or legacy", *serverMode)
+		return nil
 	}
 
 	if !IsValidIPv4Address(*localAddr) {
@@ -59,38 +85,68 @@ func parseServerCArgs() *ServerConfig {
 	return &config
 }
 
-func ServerDconnInit(config ServerConfig) {
+func serverDconnInit(config ServerConfig) {
 	cert, err := tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
 	if err != nil {
 		panic(err)
 	}
 
-	tlsConf := &tls.Config{Certificates: []tls.Certificate{cert}}
+	var tlsConf *tls.Config
+
+	if config.IsMTLS {
+		// load CA certificate file and add it to list of client CAs
+		caCertFile, err := os.ReadFile("./certs/ca.crt")
+		if err != nil {
+			log.Fatalf("error reading CA certificate: %v", err)
+		}
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caCertFile)
+
+		tlsConf = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			ClientCAs:    caCertPool,
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			MinVersion:   tls.VersionTLS13,
+			//TODO are these algo specs REALLY needed?
+			CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
+			PreferServerCipherSuites: true,
+			CipherSuites: []uint16{
+				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+				tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			},
+		}
+	} else {
+		tlsConf = &tls.Config{Certificates: []tls.Certificate{cert}}
+	}
+
 	clientListen, err := tls.Listen("tcp4", config.LocalAddr+":"+strconv.Itoa(config.LocalPort), tlsConf)
 	if err != nil {
-		panic("ServerInit::failed to TLS listen: " + err.Error())
+		panic("legacyServerInit::failed to TLS listen: " + err.Error())
 	}
 
 	for true {
 		clientConn, err := clientListen.Accept()
 		if err != nil {
-			log.Println("ServerInit::failed to connect client from ", clientConn.RemoteAddr().String())
+			log.Println("legacyServerInit::failed to connect client from ", clientConn.RemoteAddr().String())
 			continue
 		}
-		if servLogLevel >= Info {
-			log.Println("ServerInit::accepted a client from ", clientConn.RemoteAddr().String())
+		if config.LogLevel >= Info {
+			log.Println("legacyServerInit::accepted a client from ", clientConn.RemoteAddr().String())
 		}
-		go handleClientDconn(clientConn, config)
+		go handleClient(clientConn, config)
 	}
-
 }
 
-func handleClientDconn(clientConn net.Conn, config ServerConfig) {
+func handleClient(clientConn net.Conn, config ServerConfig) {
 
 	remoteConn, err := net.Dial("tcp4", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort))
 	if err != nil {
 		err1 := clientConn.Close()
-		log.Printf("handleClientDconn::failed to connect to remote app: %s\n", err)
+		log.Printf("handleClient::failed to connect to remote app: %s\n", err)
 		if err1 != nil {
 			log.Printf("During failed to connect to remote, we also failed to close client conn: %s\n", err1)
 		}
@@ -161,23 +217,27 @@ func handleClientDconn(clientConn net.Conn, config ServerConfig) {
 	go func() {
 		err := relay(clientConn, remoteConn)
 		if err != nil {
-			log.Println("handleClient::unexpected err from relay(): ", err)
+			log.Println("legacyHandleClient::unexpected err from relay(): ", err)
 		}
 	}()
 
 	serverWg.Wait()
-	if servLogLevel >= Info {
-		log.Println("handleClient::finished client process and closed")
+	if config.LogLevel >= Info {
+		log.Println("legacyHandleClient::finished client process and closed")
 	}
 }
 
 func main() {
-	PrintServerWelcomeMsg("0.3.0-dev")
+	PrintServerWelcomeMsg("Horizon Groxy Server Dev version", "0.3.0-dev")
 	serverConfig := parseServerCArgs()
+
+	if serverConfig == nil {
+		fmt.Printf("Failed to parse args, exiting...\n")
+		return
+	}
 
 	log.Print("server started with args= ")
 	log.Printf("%#v\n", *serverConfig)
 
-	ServerDconnInit(*serverConfig)
-
+	serverDconnInit(*serverConfig)
 }

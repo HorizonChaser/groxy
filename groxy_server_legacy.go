@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-var servLogLevel = Debug
+var legacyServLogLevel = Debug
 
 func main() {
 	localAddr := flag.String("localAddr", "127.0.0.1", "Address that this groxy server will listen at")
@@ -29,14 +29,12 @@ func main() {
 	flag.Parse()
 
 	config := ServerConfig{
-		LocalAddr:   *localAddr,
-		LocalPort:   *localPort,
-		CertFile:    *certFile,
-		KeyFile:     *keyFile,
-		IsVerbose:   *isVerbose,
-		IsDebugging: *isDebug,
-		RemoteAddr:  *remoteAddr,
-		RemotePort:  *remotePort,
+		LocalAddr:  *localAddr,
+		LocalPort:  *localPort,
+		CertFile:   *certFile,
+		KeyFile:    *keyFile,
+		RemoteAddr: *remoteAddr,
+		RemotePort: *remotePort,
 	}
 
 	if !IsValidIPv4Address(*localAddr) {
@@ -58,46 +56,46 @@ func main() {
 
 	//set clientLogLevel
 	if *isDebug {
-		servLogLevel = Debug
+		legacyServLogLevel = Debug
 	} else if *isVerbose {
-		servLogLevel = Info
+		legacyServLogLevel = Info
 	} else {
-		servLogLevel = Silent
+		legacyServLogLevel = Silent
 	}
 
 	log.Println("groxy server started")
-	if servLogLevel == Debug {
+	if legacyServLogLevel == Debug {
 		log.Println("with args: ", config)
 	}
 
-	remoteConn, err := RemoteApplicationInit(config)
+	remoteConn, err := remoteApplicationInit(config)
 	defer remoteConn.Close()
 	if err != nil {
 		panic(err)
 	}
 
-	ServerInit(remoteConn, config)
+	legacyServerInit(remoteConn, config)
 }
 
-func RemoteApplicationInit(config ServerConfig) (net.Conn, error) {
+func remoteApplicationInit(config ServerConfig) (net.Conn, error) {
 	listen, err := net.Listen("tcp4", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort))
 	if err != nil {
 		return nil, err
 	}
-	if servLogLevel >= Info {
-		log.Println("RemoteApplicationInit::started listening at ", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort))
+	if legacyServLogLevel >= Info {
+		log.Println("remoteApplicationInit::started listening at ", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort))
 	}
 	conn, err := listen.Accept()
 	if err != nil {
-		log.Fatal("RemoteApplicationInit::failed to connect to remote app: ", err)
+		log.Fatal("remoteApplicationInit::failed to connect to remote app: ", err)
 	}
-	if servLogLevel >= Silent {
-		log.Printf("RemoteApplicationInit::connected to remote app at %s\n", conn.RemoteAddr().String())
+	if legacyServLogLevel >= Silent {
+		log.Printf("remoteApplicationInit::connected to remote app at %s\n", conn.RemoteAddr().String())
 	}
 	return conn, nil
 }
 
-func ServerInit(remoteConn net.Conn, config ServerConfig) {
+func legacyServerInit(remoteConn net.Conn, config ServerConfig) {
 	cert, err := tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
 	if err != nil {
 		panic(err)
@@ -106,7 +104,7 @@ func ServerInit(remoteConn net.Conn, config ServerConfig) {
 	tlsConf := &tls.Config{Certificates: []tls.Certificate{cert}}
 	clientListen, err := tls.Listen("tcp4", config.LocalAddr+":"+strconv.Itoa(config.LocalPort), tlsConf)
 	if err != nil {
-		panic("ServerInit::failed to TLS listen: " + err.Error())
+		panic("legacyServerInit::failed to TLS listen: " + err.Error())
 	}
 
 	defer func(clientListen net.Listener) {
@@ -119,18 +117,18 @@ func ServerInit(remoteConn net.Conn, config ServerConfig) {
 	for true {
 		clientConn, err := clientListen.Accept()
 		if err != nil {
-			log.Println("ServerInit::failed to connect client from ", clientConn.RemoteAddr().String())
+			log.Println("legacyServerInit::failed to connect client from ", clientConn.RemoteAddr().String())
 			continue
 		}
-		if servLogLevel >= Info {
-			log.Println("ServerInit::accepted a client from ", clientConn.RemoteAddr().String())
+		if legacyServLogLevel >= Info {
+			log.Println("legacyServerInit::accepted a client from ", clientConn.RemoteAddr().String())
 		}
-		go handleClient(clientConn, remoteConn)
+		go legacyHandleClient(clientConn, remoteConn)
 	}
 
 }
 
-func handleClient(clientConn, remoteConn net.Conn) {
+func legacyHandleClient(clientConn, remoteConn net.Conn) {
 	var serverWg sync.WaitGroup
 	serverWg.Add(1)
 
@@ -144,7 +142,7 @@ func handleClient(clientConn, remoteConn net.Conn) {
 		go func() {
 			defer wg.Done()
 			n, _ := io.Copy(right, left)
-			if servLogLevel == Debug {
+			if legacyServLogLevel == Debug {
 				log.Printf("relay::forwarded %d bytes client->remote\n", n)
 			}
 			//err = right.SetReadDeadline(time.Now().Add(wait))
@@ -153,7 +151,7 @@ func handleClient(clientConn, remoteConn net.Conn) {
 			//}
 		}()
 		n, err := io.Copy(left, right)
-		if servLogLevel == Debug {
+		if legacyServLogLevel == Debug {
 			log.Printf("relay::forwarded %d bytes remote->client (err=:%s)\n", n, err)
 		}
 		err = left.SetReadDeadline(time.Now().Add(wait))
@@ -187,7 +185,7 @@ func handleClient(clientConn, remoteConn net.Conn) {
 	}()
 
 	serverWg.Wait()
-	if servLogLevel >= Info {
+	if legacyServLogLevel >= Info {
 		log.Println("HandleClient::finished client process and closed")
 	}
 }

@@ -33,7 +33,7 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 		}
 		return
 	}
-	if config.IsDebugging {
+	if config.LogLevel >= Debug {
 		log.Printf("clientProcess::connect to remote %s:%d\n", config.RemoteAddr, config.RemotePort)
 	}
 
@@ -47,7 +47,7 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 		go func() {
 			defer wg.Done()
 			n, _ := io.Copy(right, left)
-			if config.IsDebugging {
+			if config.LogLevel >= Debug {
 				log.Printf("relay::forwarded %d bytes client<-serv\n", n)
 			}
 			err := right.SetReadDeadline(time.Now().Add(wait))
@@ -56,7 +56,7 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 			}
 		}()
 		n, err := io.Copy(left, right)
-		if config.IsDebugging {
+		if config.LogLevel >= Debug {
 			log.Printf("relay::forwarded %d bytes client->serv\n", n)
 		}
 		err = left.SetReadDeadline(time.Now().Add(wait))
@@ -77,12 +77,12 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 		if err != nil {
 			log.Printf("relay::failed to close conn with server at %s: %v\n", left.RemoteAddr().String(), err)
 		}
-		if config.IsVerbose {
+		if config.LogLevel >= Info {
 			log.Printf("relay::closed conn with server at %s\n", left.RemoteAddr().String())
 		}
 
 		err = right.Close()
-		if config.IsVerbose {
+		if config.LogLevel >= Info {
 			log.Printf("relay::closed conn with client at %s\n", right.RemoteAddr().String())
 		}
 		if err != nil {
@@ -99,7 +99,7 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 	}()
 
 	clientWg.Wait()
-	if config.IsVerbose {
+	if config.LogLevel >= Info {
 		log.Println("clientProcess::finished client process and connections all closed")
 	}
 }
@@ -120,7 +120,7 @@ func ClientLoop(listen net.Listener, config ClientConfig) {
 		if err != nil {
 			panic(err)
 		}
-		if config.IsVerbose {
+		if config.LogLevel >= Debug {
 			log.Printf("ClientLoop::accepted from %s\n", conn.RemoteAddr().String())
 		}
 		// 启动一个单独的 goroutine 去处理连接
@@ -134,8 +134,13 @@ func main() {
 	localPort := flag.Int("localPort", 48620, "Port that groxy client listen on")
 	remotePort := flag.Int("remotePort", 38620, "Port that groxy server listen on")
 	insecureCertAllowed := flag.Bool("insecureCert", true, "Is insecure cert (self-signed cert) allowed on serverside")
-	isVerbose := flag.Bool("v", true, "Enable verbose output")
-	isDebugging := flag.Bool("d", true, "Enable debugging output")
+	clientLogLevel := *flag.Int("logLevel", 2, "Logging level from 0 (quite) to 2 (debug)")
+	isMTLS := flag.Bool("mtls", false, "Is mTLS enabled")
+	caCert := flag.String("cacert", "ca.crt", "CA cert used in mTLS mode")
+	clientMode := flag.String("clientMode", "raw", "Client listen-and-proxying mode (raw, socks5, http)")
+	cert := flag.String("cert", "client.crt", "Cert that client holds in mTLS mode")
+	key := flag.String("key", "client.key", "Key that client holds in mTLS mode")
+
 	flag.Parse()
 
 	if !IsValidIPv4Address(*localAddr) {
@@ -161,8 +166,25 @@ func main() {
 		RemotePort:              *remotePort,
 		RemoteAddr:              *remoteAddr,
 		AllowInsecureServerCert: *insecureCertAllowed,
-		IsVerbose:               *isVerbose,
-		IsDebugging:             *isDebugging,
+		IsMTLS:                  *isMTLS,
+		CACert:                  *caCert,
+		LogLevel:                LogLevel(clientLogLevel),
+		CertFile:                *cert,
+		KeyFile:                 *key,
+	}
+
+	switch *clientMode {
+	case "raw":
+		config.ClientMode = ClientMode(Raw)
+	case "socks5":
+		config.ClientMode = ClientMode(Socks55)
+	case "http":
+		config.ClientMode = ClientMode(HTTP)
+	}
+
+	//TODO limited clientMode for now
+	if config.ClientMode != Raw {
+		log.Fatal("Only Raw mode is supported for now")
 	}
 
 	log.Println("groxy dev version started")
