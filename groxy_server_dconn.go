@@ -125,7 +125,7 @@ func serverDconnInit(config ServerConfig) {
 
 	clientListen, err := tls.Listen("tcp4", config.LocalAddr+":"+strconv.Itoa(config.LocalPort), tlsConf)
 	if err != nil {
-		panic("legacyServerInit::failed to TLS listen: " + err.Error())
+		panic("handleClient::failed to TLS listen: " + err.Error())
 	}
 
 	for true {
@@ -143,7 +143,32 @@ func serverDconnInit(config ServerConfig) {
 
 func handleClient(clientConn net.Conn, config ServerConfig) {
 
-	//TODO logs about loaded and client certs when logLevel >= Debug
+	tlsConn, ok := clientConn.(*tls.Conn)
+	if !ok {
+		log.Printf("handleClient::invalid mTLS connection with %s\n", clientConn.RemoteAddr().String())
+		clientConn.Close()
+		return
+	}
+
+	if config.IsMTLS && config.LogLevel >= Debug {
+
+		//We need to manually do handshake before we see the client cert....
+		if err := tlsConn.Handshake(); err != nil {
+			fmt.Printf("handleClient: client handshake err %+v \n\n", err)
+			return
+		}
+
+		certs := tlsConn.ConnectionState().PeerCertificates
+		log.Printf("handleClient::client from %s has certs below:\n", clientConn.RemoteAddr().String())
+		for _, cert := range certs {
+			log.Println("=====================================")
+			log.Printf("Issuer Name: %s\n", cert.Issuer)
+			log.Printf("Expiry: %s \n", cert.NotAfter.Format("2006-January-02"))
+			log.Printf("Common Name: %s \n", cert.Issuer.CommonName)
+			log.Printf("Signiture: %x \n", cert.Signature)
+			log.Println("=====================================")
+		}
+	}
 
 	remoteConn, err := net.Dial("tcp4", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort))
 	if err != nil {
@@ -219,13 +244,13 @@ func handleClient(clientConn net.Conn, config ServerConfig) {
 	go func() {
 		err := relay(clientConn, remoteConn)
 		if err != nil {
-			log.Println("legacyHandleClient::unexpected err from relay(): ", err)
+			log.Println("handleClient::unexpected err from relay(): ", err)
 		}
 	}()
 
 	serverWg.Wait()
 	if config.LogLevel >= Info {
-		log.Println("legacyHandleClient::finished client process and closed")
+		log.Println("handleClient::finished client process and closed")
 	}
 }
 

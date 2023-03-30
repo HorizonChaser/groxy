@@ -60,6 +60,17 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 	}
 	if config.LogLevel >= Debug {
 		log.Printf("clientProcess::connect to remote %s:%d\n", config.RemoteAddr, config.RemotePort)
+
+		log.Println("clientProcess::server certs:")
+		certs := serverConn.ConnectionState().PeerCertificates
+		for _, cert := range certs {
+			log.Println("=====================================")
+			log.Printf("Issuer Name: %s\n", cert.Issuer)
+			log.Printf("Expiry: %s \n", cert.NotAfter.Format("2006-January-02"))
+			log.Printf("Common Name: %s \n", cert.Issuer.CommonName)
+			log.Printf("Signiture: %x \n", cert.Signature)
+			log.Println("=====================================")
+		}
 	}
 
 	relay := func(left, right net.Conn) error {
