@@ -2,10 +2,12 @@ package main
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -22,6 +24,29 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 	conf := &tls.Config{
 		InsecureSkipVerify: config.AllowInsecureServerCert,
 	}
+
+	if config.IsMTLS {
+
+		//TODO logs about loaded and server certs when logLevel >= Debug
+		cert, err := ioutil.ReadFile("./certs/ca.crt")
+		if err != nil {
+			log.Fatalf("could not open certificate file: %v", err)
+		}
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(cert)
+
+		clientCert := config.CertFile
+		clientKey := config.KeyFile
+		log.Println("Load key pairs - ", clientCert, clientKey)
+		certificate, err := tls.LoadX509KeyPair(clientCert, clientKey)
+		if err != nil {
+			log.Fatalf("could not load certificate: %v", err)
+		}
+
+		conf.Certificates = []tls.Certificate{certificate}
+		conf.RootCAs = caCertPool
+	}
+
 	serverConn, err := tls.Dial("tcp", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort), conf)
 	if err != nil {
 		log.Printf("clientProcess::failed to connect to server at %s: ", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort))

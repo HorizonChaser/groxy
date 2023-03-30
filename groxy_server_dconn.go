@@ -131,17 +131,19 @@ func serverDconnInit(config ServerConfig) {
 	for true {
 		clientConn, err := clientListen.Accept()
 		if err != nil {
-			log.Println("legacyServerInit::failed to connect client from ", clientConn.RemoteAddr().String())
+			log.Println("serverDconnInit::failed to connect client from ", clientConn.RemoteAddr().String())
 			continue
 		}
 		if config.LogLevel >= Info {
-			log.Println("legacyServerInit::accepted a client from ", clientConn.RemoteAddr().String())
+			log.Println("serverDconnInit::accepted a client from ", clientConn.RemoteAddr().String())
 		}
 		go handleClient(clientConn, config)
 	}
 }
 
 func handleClient(clientConn net.Conn, config ServerConfig) {
+
+	//TODO logs about loaded and client certs when logLevel >= Debug
 
 	remoteConn, err := net.Dial("tcp4", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort))
 	if err != nil {
