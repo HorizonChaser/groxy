@@ -1,4 +1,4 @@
-package main
+package serv
 
 import (
 	"crypto/tls"
@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	. "go-test/common_def"
 	"io"
 	"log"
 	"net"

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	. "go-test/common_def"
 	"io"
 	"io/ioutil"
 	"log"
