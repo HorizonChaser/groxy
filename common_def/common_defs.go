@@ -1,4 +1,4 @@
-package main
+package common_def
 
 import (
 	"fmt"

@@ -67,7 +67,7 @@ func httpServ() {
 			"message": "hello,world",
 		})
 	})
-	router.Run("localhost:55590") // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
+	router.Run("localhost:55590")
 }
 
 func httpsServ() error {
@@ -101,7 +101,7 @@ func tlsHandler(port int) gin.HandlerFunc {
 
 func tcpEcho() {
 	conn, err := net.Dial("tcp4", "127.0.0.1:55590")
-	log.Println("connected with groxy server from ", conn.LocalAddr().String())
+	//log.Println("connected with groxy server from ", conn.LocalAddr().String())
 	if err != nil {
 		panic(err)
 	}

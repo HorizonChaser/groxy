@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"crypto/tls"
@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	. "go-test/common_def"
 	"io"
 	"io/ioutil"
 	"log"
@@ -68,7 +69,7 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 			log.Printf("Issuer Name: %s\n", cert.Issuer)
 			log.Printf("Expiry: %s \n", cert.NotAfter.Format("2006-January-02"))
 			log.Printf("Common Name: %s \n", cert.Issuer.CommonName)
-			log.Printf("Signiture: %x \n", cert.Signature)
+			log.Printf("Signature (first 8 bytes): %x ...\n", cert.Signature[:8])
 			log.Println("=====================================")
 		}
 	}
@@ -164,7 +165,7 @@ func ClientLoop(listen net.Listener, config ClientConfig) {
 	}
 }
 
-func main() {
+func ClientMain() {
 	localAddr := flag.String("localAddr", "127.0.0.1", "Address that groxy will listen at")
 	remoteAddr := flag.String("remoteAddr", "127.0.0.1", "Address that groxy server at")
 	localPort := flag.Int("localPort", 48620, "Port that groxy client listen on")
@@ -172,10 +173,10 @@ func main() {
 	insecureCertAllowed := flag.Bool("insecureCert", true, "Is insecure cert (self-signed cert) allowed on serverside")
 	clientLogLevel := *flag.Int("logLevel", 2, "Logging level from 0 (quite) to 2 (debug)")
 	isMTLS := flag.Bool("mtls", false, "Is mTLS enabled")
-	caCert := flag.String("cacert", "ca.crt", "CA cert used in mTLS mode")
+	caCert := flag.String("cacert", ".\\certs\\ca.crt", "CA cert used in mTLS mode")
 	clientMode := flag.String("clientMode", "raw", "Client listen-and-proxying mode (raw, socks5, http)")
-	cert := flag.String("cert", "client.crt", "Cert that client holds in mTLS mode")
-	key := flag.String("key", "client.key", "Key that client holds in mTLS mode")
+	cert := flag.String("cert", ".\\certs\\client.crt", "Cert that client holds in mTLS mode")
+	key := flag.String("key", ".\\certs\\client.key", "Key that client holds in mTLS mode")
 
 	flag.Parse()
 

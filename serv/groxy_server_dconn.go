@@ -1,4 +1,4 @@
-package main
+package serv
 
 import (
 	"crypto/tls"
@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	. "go-test/common_def"
 	"io"
 	"log"
 	"net"
@@ -27,19 +28,17 @@ notes about differences between .key, .pem and .crt files
 .cert or .crt files are the signed certificates -- basically the "magic" that allows certain sites to be marked as trustworthy by a third party.
 */
 
-var servLogLevel = Silent
-
 func parseServerCArgs() *ServerConfig {
 	localAddr := flag.String("localAddr", "127.0.0.1", "Address that this groxy server will listen at")
 	localPort := flag.Int("localPort", 38620, "Port that this groxy server will listen on")
-	certFile := flag.String("cert", "server.pem", "Certificate file that TLS requires, in PEM format")
-	keyFile := flag.String("key", "server.key", "Key file for TLS encryption")
+	certFile := flag.String("cert", ".\\certs\\server.pem", "Certificate file that TLS requires, in PEM format")
+	keyFile := flag.String("key", ".\\certs\\server.key", "Key file for TLS encryption")
 	remoteAddr := flag.String("remoteAddr", "127.0.0.1", "Address that remote application exists")
 	remotePort := flag.Int("remotePort", 55590, "Port that remote application exists")
 	servLogLevel := *flag.Int("logLevel", 2, "Logging level from 0 (quite) to 2 (debug)")
 	isMTLS := flag.Bool("mtls", false, "Is mTLS enabled")
 	serverMode := flag.String("serverMode", "dynamic", "Server Mode (dynamic or legacy)")
-	caCert := flag.String("cacert", "ca.crt", "CA cert used in mTLS mode")
+	caCert := flag.String("cacert", ".\\certs\\ca.crt", "CA cert used in mTLS mode")
 
 	flag.Parse()
 
@@ -95,7 +94,7 @@ func serverDconnInit(config ServerConfig) {
 
 	if config.IsMTLS {
 		// load CA certificate file and add it to list of client CAs
-		caCertFile, err := os.ReadFile("./certs/ca.crt")
+		caCertFile, err := os.ReadFile(config.CACert)
 		if err != nil {
 			log.Fatalf("error reading CA certificate: %v", err)
 		}
@@ -165,7 +164,7 @@ func handleClient(clientConn net.Conn, config ServerConfig) {
 			log.Printf("Issuer Name: %s\n", cert.Issuer)
 			log.Printf("Expiry: %s \n", cert.NotAfter.Format("2006-January-02"))
 			log.Printf("Common Name: %s \n", cert.Issuer.CommonName)
-			log.Printf("Signiture: %x \n", cert.Signature)
+			log.Printf("Signature (first 8 bytes): %x ...\n", cert.Signature[:8])
 			log.Println("=====================================")
 		}
 	}
@@ -203,19 +202,19 @@ func handleClient(clientConn net.Conn, config ServerConfig) {
 		var wg sync.WaitGroup
 		var wait = 10 * time.Millisecond
 		wg.Add(1)
-		go func() {
+		go func(config ServerConfig) {
 			defer wg.Done()
 			n, _ := io.Copy(right, left)
-			if servLogLevel == Debug {
+			if config.LogLevel == Debug {
 				log.Printf("relay::forwarded %d bytes client->remote\n", n)
 			}
 			//err = right.SetReadDeadline(time.Now().Add(wait))
 			//if err != nil {
 			//	log.Printf("relay::failed to set read deadline for right @ %s: %v\n", right.RemoteAddr().String(), err)
 			//}
-		}()
+		}(config)
 		n, err := io.Copy(left, right)
-		if servLogLevel == Debug {
+		if config.LogLevel == Debug {
 			log.Printf("relay::forwarded %d bytes remote->client (err=:%s)\n", n, err)
 		}
 		err = left.SetReadDeadline(time.Now().Add(wait))
@@ -254,7 +253,7 @@ func handleClient(clientConn net.Conn, config ServerConfig) {
 	}
 }
 
-func main() {
+func ServMain() {
 	PrintServerWelcomeMsg("Horizon Groxy Server Dev version", "0.3.0-dev")
 	serverConfig := parseServerCArgs()
 
