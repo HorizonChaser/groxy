@@ -39,19 +39,23 @@ func parseServerCArgs() *ServerConfig {
 	isMTLS := flag.Bool("mtls", false, "Is mTLS enabled")
 	serverMode := flag.String("serverMode", "dynamic", "Server Mode (dynamic or legacy)")
 	caCert := flag.String("cacert", ".\\certs\\ca.crt", "CA cert used in mTLS mode")
+	isKeyLoggerEnabled := flag.Bool("keyLogger", false, "Is key logger enabled (FOR AUDIT PURPOSE ONLY)")
+	keyLoggerPath := flag.String("keyloggerPath", ".\\TLS_KEY_LOG", "Key logger file path (FOR AUDIT PURPOSE ONLY)")
 
 	flag.Parse()
 
 	config := ServerConfig{
-		LocalAddr:  *localAddr,
-		LocalPort:  *localPort,
-		CertFile:   *certFile,
-		KeyFile:    *keyFile,
-		LogLevel:   LogLevel(servLogLevel),
-		RemoteAddr: *remoteAddr,
-		RemotePort: *remotePort,
-		IsMTLS:     *isMTLS,
-		CACert:     *caCert,
+		LocalAddr:   *localAddr,
+		LocalPort:   *localPort,
+		CertFile:    *certFile,
+		KeyFile:     *keyFile,
+		LogLevel:    LogLevel(servLogLevel),
+		RemoteAddr:  *remoteAddr,
+		RemotePort:  *remotePort,
+		IsMTLS:      *isMTLS,
+		CACert:      *caCert,
+		IsKeyLogged: *isKeyLoggerEnabled,
+		KeyLogger:   *keyLoggerPath,
 	}
 
 	switch *serverMode {
@@ -106,20 +110,30 @@ func serverDconnInit(config ServerConfig) {
 			ClientCAs:    caCertPool,
 			ClientAuth:   tls.RequireAndVerifyClientCert,
 			MinVersion:   tls.VersionTLS13,
-			//TODO are these algo specs REALLY needed?
-			CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
-			PreferServerCipherSuites: true,
-			CipherSuites: []uint16{
-				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-			},
+
+			//CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
+			//PreferServerCipherSuites: true,
+			//CipherSuites: []uint16{
+			//	tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			//	tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+			//	tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+			//	tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+			//	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			//	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			//},
 		}
 	} else {
 		tlsConf = &tls.Config{Certificates: []tls.Certificate{cert}}
+	}
+
+	if config.IsKeyLogged {
+		f, err := os.OpenFile(config.KeyLogger, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+
+		tlsConf.KeyLogWriter = f
 	}
 
 	clientListen, err := tls.Listen("tcp4", config.LocalAddr+":"+strconv.Itoa(config.LocalPort), tlsConf)

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	. "go-test/common_def"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -29,7 +28,7 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 	if config.IsMTLS {
 
 		//TODO logs about loaded and server certs when logLevel >= Debug
-		cert, err := ioutil.ReadFile("./certs/ca.crt")
+		cert, err := os.ReadFile("./certs/ca.crt")
 		if err != nil {
 			log.Fatalf("could not open certificate file: %v", err)
 		}
@@ -141,7 +140,7 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 	}
 }
 
-func ClientInit(config ClientConfig) (net.Listener, error) {
+func clientInit(config ClientConfig) (net.Listener, error) {
 	// 建立 tcp 服务
 	listen, err := net.Listen("tcp4", config.LocalAddr+":"+strconv.Itoa(config.LocalPort))
 	if err != nil {
@@ -150,7 +149,7 @@ func ClientInit(config ClientConfig) (net.Listener, error) {
 	return listen, nil
 }
 
-func ClientLoop(listen net.Listener, config ClientConfig) {
+func clientLoopRaw(listen net.Listener, config ClientConfig) {
 	for {
 		// 等待客户端建立连接
 		conn, err := listen.Accept()
@@ -158,7 +157,7 @@ func ClientLoop(listen net.Listener, config ClientConfig) {
 			panic(err)
 		}
 		if config.LogLevel >= Debug {
-			log.Printf("ClientLoop::accepted from %s\n", conn.RemoteAddr().String())
+			log.Printf("clientLoopRaw::accepted from %s\n", conn.RemoteAddr().String())
 		}
 		// 启动一个单独的 goroutine 去处理连接
 		go clientProcess(conn, config)
@@ -226,9 +225,9 @@ func ClientMain() {
 
 	log.Println("groxy dev version started")
 	log.Printf("args: ClientConfig=%#v\n", config)
-	listener, err := ClientInit(config)
+	listener, err := clientInit(config)
 	if err != nil {
 		panic(err)
 	}
-	ClientLoop(listener, config)
+	clientLoopRaw(listener, config)
 }

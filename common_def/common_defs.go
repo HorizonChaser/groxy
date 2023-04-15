@@ -70,6 +70,10 @@ type ServerConfig struct {
 	IsMTLS     bool
 	CACert     string
 	ServerMode ServerMode
+
+	//For key logging to decrypt TLS1.3 traffics
+	IsKeyLogged bool
+	KeyLogger   string
 }
 
 type ClientConfig struct {
