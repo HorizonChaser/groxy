@@ -15,6 +15,7 @@ type ClientMode int
 const (
 	Dynamic = iota
 	Legacy
+	Realtime
 )
 
 const (

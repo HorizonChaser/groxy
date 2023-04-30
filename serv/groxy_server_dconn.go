@@ -63,6 +63,8 @@ func parseServerCArgs() *ServerConfig {
 		config.ServerMode = Legacy
 	case "dynamic":
 		config.ServerMode = Dynamic
+	case "realtime":
+		config.ServerMode = Realtime
 	default:
 		fmt.Printf("Incorrect value for serverMode: %s\nExpected: dynamic or legacy", *serverMode)
 		return nil
@@ -156,6 +158,13 @@ func serverDconnInit(config ServerConfig) {
 
 func handleClient(clientConn net.Conn, config ServerConfig) {
 
+	defer func(clientConn net.Conn) {
+		err := clientConn.Close()
+		if err != nil && err.Error() != "use of closed network connection" {
+			log.Printf("failed to close client conn: %s\n", err)
+		}
+	}(clientConn)
+
 	tlsConn, ok := clientConn.(*tls.Conn)
 	if !ok {
 		log.Printf("handleClient::invalid mTLS connection with %s\n", clientConn.RemoteAddr().String())
@@ -183,15 +192,40 @@ func handleClient(clientConn net.Conn, config ServerConfig) {
 		}
 	}
 
-	remoteConn, err := net.Dial("tcp4", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort))
-	if err != nil {
-		err1 := clientConn.Close()
-		log.Printf("handleClient::failed to connect to remote app: %s\n", err)
-		if err1 != nil {
-			log.Printf("During failed to connect to remote, we also failed to close client conn: %s\n", err1)
+	remoteAddr := config.RemoteAddr + ":" + strconv.Itoa(config.RemotePort)
+
+	if config.ServerMode == Realtime {
+		buf := make([]byte, 256)
+
+		n, err := io.ReadFull(clientConn, buf[:5])
+		if err != nil {
+			log.Printf("Insuffcient bytes read: got %d , expected 2 for now\n", n)
+			return
 		}
-		return
+
+		if buf[0] != 0x86 || buf[1] != 0x20 {
+			log.Printf("Version field corrputed: got %#v\n", buf[:2])
+			return
+		}
+
+		if buf[2] != 0x11 {
+			log.Printf("Corrputed cmd/AddrType: %#v\n", buf[2:4])
+			return
+		}
+
+		//addrType := buf[3]
+		addrLen := buf[4]
+
+		n, err = io.ReadFull(clientConn, buf[5:5+addrLen])
+		if n != int(addrLen) {
+			log.Printf("Corrupted Addr: no enough bytes")
+			return
+		}
+
+		remoteAddr = string(buf[5 : 5+addrLen])
 	}
+
+	remoteConn, err := net.Dial("tcp", remoteAddr)
 	defer func(remoteConn net.Conn) {
 		err := remoteConn.Close()
 		if err != nil {
@@ -199,12 +233,26 @@ func handleClient(clientConn net.Conn, config ServerConfig) {
 		}
 	}(remoteConn)
 
-	defer func(clientConn net.Conn) {
-		err := clientConn.Close()
-		if err != nil && err.Error() != "use of closed network connection" {
-			log.Printf("failed to close client conn: %s\n", err)
+	if err != nil {
+		err1 := clientConn.Close()
+		log.Printf("handleClient::failed to connect to remote app: %s\n", err)
+		if err1 != nil {
+			log.Printf("During failed to connect to remote, we also failed to close client conn: %s\n", err1)
 		}
-	}(clientConn)
+		return
+	} else {
+		retMsg := GprotoConnMsg{
+			Ver:     [2]byte{0x86, 0x20},
+			Command: 0x20,
+			Status:  0,
+		}
+		n, err := clientConn.Write(retMsg.ToByteSlice())
+		if err != nil || n != 5 {
+			log.Printf("Failed to respond to client with gproto msg\n")
+			log.Printf("err=%v, n=%d\n", err, n)
+			return
+		}
+	}
 
 	var serverWg sync.WaitGroup
 	serverWg.Add(1)
