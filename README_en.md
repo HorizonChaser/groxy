@@ -7,12 +7,12 @@ The server side and client side groxy will each expose one port for applications
 ## Current Progress
 
 - [x] Implement TCP tunnel
-- [ ] Support SOCKS5 proxy
-- [ ] Support HTTP proxy (not likely to be implemented)
+- [x] Support SOCKS5 proxy
+- [x] Support HTTP proxy (not likely to be implemented)
 - [ ] Capture and forward all TCP traffic on client side
   - possibly implemented by using TUN device and route table hooking
-- [ ] Use a connection pool to optimize performance
-- [ ] Benchmark
+- [x] Use a connection pool to optimize performance
+- [x] Benchmark
 
 ## Usage
 
