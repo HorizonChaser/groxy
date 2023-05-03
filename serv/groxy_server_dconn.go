@@ -208,7 +208,7 @@ func handleClient(clientConn net.Conn, config ServerConfig) {
 			return
 		}
 
-		if buf[2] != 0x11 {
+		if buf[2] != 0x10 {
 			log.Printf("Corrputed cmd/AddrType: %#v\n", buf[2:4])
 			return
 		}
@@ -224,6 +224,8 @@ func handleClient(clientConn net.Conn, config ServerConfig) {
 
 		remoteAddr = string(buf[5 : 5+addrLen])
 	}
+
+	log.Printf("remoteAddr Parsed: %s\n", remoteAddr)
 
 	remoteConn, err := net.Dial("tcp", remoteAddr)
 	defer func(remoteConn net.Conn) {
@@ -247,7 +249,7 @@ func handleClient(clientConn net.Conn, config ServerConfig) {
 			Status:  0,
 		}
 		n, err := clientConn.Write(retMsg.ToByteSlice())
-		if err != nil || n != 5 {
+		if err != nil || n != 4 {
 			log.Printf("Failed to respond to client with gproto msg\n")
 			log.Printf("err=%v, n=%d\n", err, n)
 			return

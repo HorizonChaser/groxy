@@ -11,10 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/unrolled/secure"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 )
@@ -122,7 +122,7 @@ func tcpEcho() {
 
 func getCertInfo(path string) pkix.Name {
 	// Load the certificate file
-	certBytes, err := ioutil.ReadFile(path)
+	certBytes, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Println("Failed to read certificate file:", err)
 		return pkix.Name{}

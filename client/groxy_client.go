@@ -196,7 +196,7 @@ func clientSocks5Process(clientConn net.Conn, config ClientConfig) {
 		Ver:      [2]byte{0x86, 0x20},
 		Command:  0x10,
 		AddrType: 0x14,
-		AddrLen:  4,
+		AddrLen:  byte(len(destAddr)),
 		Addr:     []byte(destAddr),
 	}
 
@@ -261,9 +261,9 @@ func clientSocks5Process(clientConn net.Conn, config ClientConfig) {
 		return
 	}
 
-	buffer := make([]byte, 5)
+	buffer := make([]byte, 4)
 	n, err := serverConn.Read(buffer)
-	if err != nil || n != 5 {
+	if err != nil || n != 4 {
 		//TODO log
 		return
 	}
@@ -427,6 +427,201 @@ func clientSocks5ParseAddrPort(client net.Conn) (string, error) {
 	return destAddrPort, nil
 }
 
+func clientLoopHttp(listener net.Listener, config ClientConfig) {
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			panic(err)
+		}
+		if config.LogLevel >= Debug {
+			log.Printf("clientLoopSocks5::TCP from %s\n", conn.RemoteAddr().String())
+		}
+
+		go clientHttpProcess(conn, config)
+	}
+}
+
+func clientHttpProcess(conn net.Conn, config ClientConfig) {
+	// 用来存放客户端数据的缓冲区
+	var b [1024]byte
+	//从客户端获取数据
+	n, err := conn.Read(b[:])
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	var method, URL, address string
+	// 从客户端数据读入 method，url
+	fmt.Sscanf(string(b[:bytes.IndexByte(b[:], '\n')]), "%s%s", &method, &URL)
+	hostPortURL := (URL)
+
+	// 如果方法是 CONNECT，则为 https 协议
+	if method == "CONNECT" {
+		address = hostPortURL
+	} else { //否则为 http 协议
+		conn.Write([]byte("HTTP/1.0 405 Method Not Allowed"))
+		conn.Close()
+		return
+	}
+
+	msg := GprotoAddrMsg{
+		Ver:      [2]byte{0x86, 0x20},
+		Command:  0x10,
+		AddrType: 0x14,
+		AddrLen:  byte(len(address)),
+		Addr:     []byte(address),
+	}
+
+	var clientWg sync.WaitGroup
+	clientWg.Add(1)
+
+	conf := &tls.Config{
+		InsecureSkipVerify: config.AllowInsecureServerCert,
+	}
+
+	if config.IsMTLS {
+
+		//TODO logs about loaded and server certs when logLevel >= Debug
+		cert, err := os.ReadFile("./certs/ca.crt")
+		if err != nil {
+			log.Fatalf("could not open certificate file: %v", err)
+		}
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(cert)
+
+		clientCert := config.CertFile
+		clientKey := config.KeyFile
+		log.Println("Load key pairs - ", clientCert, clientKey)
+		certificate, err := tls.LoadX509KeyPair(clientCert, clientKey)
+		if err != nil {
+			log.Fatalf("could not load certificate: %v", err)
+		}
+
+		conf.Certificates = []tls.Certificate{certificate}
+		conf.RootCAs = caCertPool
+	}
+
+	clientConn := conn
+
+	serverConn, err := tls.Dial("tcp", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort), conf)
+	if err != nil {
+		log.Printf("clientProcess::failed to connect to server at %s: ", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort))
+		log.Println(err)
+		err := clientConn.Close()
+		if err != nil {
+			log.Printf("clientProcess::failed to close conn with client at %s: %v\n", clientConn.RemoteAddr().String(), err)
+			return
+		}
+		return
+	}
+	if config.LogLevel >= Debug {
+		log.Printf("clientProcess::connect to remote %s:%d\n", config.RemoteAddr, config.RemotePort)
+
+		log.Println("clientProcess::server certs:")
+		certs := serverConn.ConnectionState().PeerCertificates
+		for _, cert := range certs {
+			log.Println("=====================================")
+			log.Printf("Issuer Name: %s\n", cert.Issuer)
+			log.Printf("Expiry: %s \n", cert.NotAfter.Format("2006-January-02"))
+			log.Printf("Common Name: %s \n", cert.Issuer.CommonName)
+			log.Printf("Signature (first 8 bytes): %x ...\n", cert.Signature[:8])
+			log.Println("=====================================")
+		}
+	}
+
+	_, err = serverConn.Write(msg.ToByteSlice())
+	if err != nil {
+		//TODO log
+		conn.Write([]byte("HTTP/1.0 500 Internal Error"))
+		conn.Close()
+		return
+	}
+
+	buffer := make([]byte, 4)
+	n, err = serverConn.Read(buffer)
+	if err != nil || n != 4 {
+		//TODO log
+		conn.Write([]byte("HTTP/1.0 500 Internal Error"))
+		conn.Close()
+		return
+	}
+	if !bytes.Equal(buffer, []byte{0x86, 0x20, 0x20, 0x00}) {
+		//TODO log
+		conn.Write([]byte("HTTP/1.0 500 Internal Error"))
+		conn.Close()
+		return
+	}
+
+	conn.Write([]byte("HTTP/1.0 200 Connection Established\r\n\r\n"))
+
+	relay := func(left, right net.Conn) error {
+		defer clientWg.Done()
+
+		var err, err1 error
+		var wg sync.WaitGroup
+		var wait = 10 * time.Millisecond
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			n, _ := io.Copy(right, left)
+			if config.LogLevel >= Debug {
+				log.Printf("relay::forwarded %d bytes client<-serv\n", n)
+			}
+			err := right.SetReadDeadline(time.Now().Add(wait))
+			if err != nil {
+				log.Printf("relay::failed to set read deadline for right @ %s: %v\n", right.RemoteAddr().String(), err)
+			}
+		}()
+		n, err := io.Copy(left, right)
+		if config.LogLevel >= Debug {
+			log.Printf("relay::forwarded %d bytes client->serv\n", n)
+		}
+		err = left.SetReadDeadline(time.Now().Add(wait))
+		if err != nil {
+			log.Printf("relay::failed to set read deadline for left @ %s: %v\n", right.RemoteAddr().String(), err)
+		}
+		wg.Wait()
+
+		if err != nil && !errors.Is(err, os.ErrDeadlineExceeded) {
+			return err
+		}
+
+		if err1 != nil && !errors.Is(err1, os.ErrDeadlineExceeded) {
+			return err1
+		}
+
+		err = left.Close()
+		if err != nil {
+			log.Printf("relay::failed to close conn with server at %s: %v\n", left.RemoteAddr().String(), err)
+		}
+		if config.LogLevel >= Info {
+			log.Printf("relay::closed conn with server at %s\n", left.RemoteAddr().String())
+		}
+
+		err = right.Close()
+		if config.LogLevel >= Info {
+			log.Printf("relay::closed conn with client at %s\n", right.RemoteAddr().String())
+		}
+		if err != nil {
+			log.Printf("relay::failed to close conn with client at %s: %v\n", right.RemoteAddr().String(), err)
+		}
+		return nil
+	}
+
+	go func() {
+		err := relay(serverConn, clientConn)
+		if err != nil {
+			log.Printf("clientProcess::unexpected err thrown from relay(): %v\n", err)
+		}
+	}()
+
+	clientWg.Wait()
+	if config.LogLevel >= Info {
+		log.Println("clientProcess::finished client process and connections all closed")
+	}
+}
+
 func ClientMain() {
 	localAddr := flag.String("localAddr", "127.0.0.1", "Address that groxy will listen at")
 	remoteAddr := flag.String("remoteAddr", "127.0.0.1", "Address that groxy server at")
@@ -496,8 +691,7 @@ func ClientMain() {
 		clientLoopSocks5(listener, config)
 	}
 
-	//TODO limited mode for now
 	if config.ClientMode == HTTP {
-		log.Fatalln("HTTP mode not supported by now")
+		clientLoopHttp(listener, config)
 	}
 }

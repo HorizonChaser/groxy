@@ -20,7 +20,7 @@ func (g *GprotoAddrMsg) ToByteSlice() []byte {
 	buf[2] = g.Command
 	buf[3] = g.AddrType
 	buf[4] = g.AddrLen
-	copy(buf[6:], g.Addr)
+	copy(buf[5:], g.Addr)
 
 	return buf
 }

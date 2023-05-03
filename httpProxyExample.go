@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-func main() {
+func xmain() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	l, err := net.Listen("tcp", ":8081")
 	if err != nil {
