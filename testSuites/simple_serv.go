@@ -19,6 +19,7 @@ import (
 	"time"
 )
 
+// tcpServ writes "Hellowww" to incoming TCP conn and read up to 256 bytes before close
 func tcpServ() {
 	listen, err := net.Listen("tcp4", "127.0.0.1:55590")
 	if err != nil {
@@ -55,9 +56,12 @@ func tcpServ() {
 	}
 }
 
-func httpServ() {
+// httpServ will listen http requests at localhost:55590 and serve / for a static json response
+func httpServ(quite bool) {
 	gin.SetMode(gin.ReleaseMode)
-	gin.DefaultWriter = io.Discard
+	if quite {
+		gin.DefaultWriter = io.Discard
+	}
 	// 启动gin框架，采用默认配置
 	router := gin.Default()
 
@@ -70,9 +74,12 @@ func httpServ() {
 	router.Run("localhost:55590")
 }
 
-func httpsServ() error {
+// httpServ will listen https requests at localhost:55590 and serve / for a static json response, with cert ./server.pem and ./server.key
+func httpsServ(quite bool) error {
 	gin.SetMode(gin.ReleaseMode)
-	gin.DefaultWriter = io.Discard
+	if quite {
+		gin.DefaultWriter = io.Discard
+	}
 	r := gin.Default()
 	r.GET("/", func(c *gin.Context) {
 		c.String(200, "test for 【%s】", "https")
@@ -82,6 +89,7 @@ func httpsServ() error {
 	return r.RunTLS("localhost:"+strconv.Itoa(55590), "./server.pem", "./server.key")
 }
 
+// tlsHandler returns a gin.HandlerFunc to handle HTTPS requests
 func tlsHandler(port int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		secureMiddleware := secure.New(secure.Options{
@@ -99,6 +107,7 @@ func tlsHandler(port int) gin.HandlerFunc {
 	}
 }
 
+// tcpEcho reads up to 64KB from a connection, and then writes them back
 func tcpEcho() {
 	conn, err := net.Dial("tcp4", "127.0.0.1:55590")
 	//log.Println("connected with groxy server from ", conn.LocalAddr().String())
@@ -120,6 +129,7 @@ func tcpEcho() {
 	}
 }
 
+// getCertInfo returns cert object from a path to cert file
 func getCertInfo(path string) pkix.Name {
 	// Load the certificate file
 	certBytes, err := os.ReadFile(path)
@@ -146,6 +156,7 @@ func getCertInfo(path string) pkix.Name {
 	return cert.Subject
 }
 
+// tlsServ reads up to 64Bytes from a TLS connection, and then writes them back, with a prefix
 func tlsServ() {
 	cert, err := tls.LoadX509KeyPair("server.pem", "server.key")
 	certInfo := getCertInfo("server.pem")
@@ -173,6 +184,7 @@ func tlsServ() {
 
 }
 
+// handleConn is the handler func of tlsServ
 func handleConn(conn net.Conn) {
 	defer func() {
 		conn.Close()
@@ -202,8 +214,10 @@ func handleConn(conn net.Conn) {
 	}
 }
 
+// main is the entry point of simple_serv.go
 func main() {
 	mode := flag.String("mode", "tls", "the mode for simpleServ (tls or tcp)")
+	quite := flag.Bool("quite", true, "Quite Mode")
 	flag.Parse()
 
 	if *mode == "tls" {
@@ -222,15 +236,14 @@ func main() {
 	}
 	if *mode == "http" {
 		log.Println("started HTTP listen server")
-		httpServ()
+		httpServ(*quite)
 	}
 	if *mode == "https" {
 		log.Println("started HTTPS listen server")
-		err := httpsServ()
+		err := httpsServ(*quite)
 		if err != nil {
 			log.Println(err)
 			return
 		}
 	}
-
 }

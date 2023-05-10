@@ -1,5 +1,6 @@
 package common_def
 
+// GprotoAddrMsg is Gproto "CONNECT" message
 type GprotoAddrMsg struct {
 	Ver      [2]byte
 	Command  byte
@@ -8,12 +9,14 @@ type GprotoAddrMsg struct {
 	Addr     []byte
 }
 
+// GprotoConnMsg is Gproto "STATUS" message
 type GprotoConnMsg struct {
 	Ver     [2]byte
 	Command byte
 	Status  byte
 }
 
+// ToByteSlice serializes a Gproto CONNECT message to []byte
 func (g *GprotoAddrMsg) ToByteSlice() []byte {
 	buf := make([]byte, 5+int(g.AddrLen))
 	copy(buf[:2], g.Ver[:])
@@ -25,6 +28,7 @@ func (g *GprotoAddrMsg) ToByteSlice() []byte {
 	return buf
 }
 
+// ToByteSlice serializes a Gproto STATUS message to []byte
 func (g *GprotoConnMsg) ToByteSlice() []byte {
 	buf := make([]byte, 4)
 	copy(buf[:2], g.Ver[:])

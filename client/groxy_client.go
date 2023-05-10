@@ -18,11 +18,14 @@ import (
 	"time"
 )
 
+// clientProcess connects to server in config, and then simply forward data between client and server
 func clientProcess(clientConn net.Conn, config ClientConfig) {
 
+	// used to wait for both sides closing conns
 	var clientWg sync.WaitGroup
 	clientWg.Add(1)
 
+	// since our cert is self-signed, so we need to allow Insecure server side certs
 	conf := &tls.Config{
 		InsecureSkipVerify: config.AllowInsecureServerCert,
 	}
@@ -39,7 +42,9 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 
 		clientCert := config.CertFile
 		clientKey := config.KeyFile
-		log.Println("Load key pairs - ", clientCert, clientKey)
+		if config.LogLevel >= Debug {
+			log.Println("Load key pairs - ", clientCert, clientKey)
+		}
 		certificate, err := tls.LoadX509KeyPair(clientCert, clientKey)
 		if err != nil {
 			log.Fatalf("could not load certificate: %v", err)
@@ -49,6 +54,7 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 		conf.RootCAs = caCertPool
 	}
 
+	// connect to server in TLS
 	serverConn, err := tls.Dial("tcp", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort), conf)
 	if err != nil {
 		log.Printf("clientProcess::failed to connect to server at %s: ", config.RemoteAddr+":"+strconv.Itoa(config.RemotePort))
@@ -75,6 +81,7 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 		}
 	}
 
+	// relay performs forwarding jobs actually
 	relay := func(left, right net.Conn) error {
 		defer clientWg.Done()
 
@@ -136,12 +143,14 @@ func clientProcess(clientConn net.Conn, config ClientConfig) {
 		}
 	}()
 
+	// wait for both sides close conns
 	clientWg.Wait()
 	if config.LogLevel >= Info {
 		log.Println("clientProcess::finished client process and connections all closed")
 	}
 }
 
+// clientInit creates a listener on given addr and port in RAW mode
 func clientInit(config ClientConfig) (net.Listener, error) {
 	// 建立 tcp 服务
 	listen, err := net.Listen("tcp4", config.LocalAddr+":"+strconv.Itoa(config.LocalPort))
@@ -151,6 +160,7 @@ func clientInit(config ClientConfig) (net.Listener, error) {
 	return listen, nil
 }
 
+// clientLoopRaw loops to accept conns from client, and then clientProcess will handle forwarding jobs
 func clientLoopRaw(listen net.Listener, config ClientConfig) {
 	for {
 		// 等待客户端建立连接
@@ -166,6 +176,7 @@ func clientLoopRaw(listen net.Listener, config ClientConfig) {
 	}
 }
 
+// clientLoopSocks5 loops and accept client SOCKS5 requests
 func clientLoopSocks5(listen net.Listener, config ClientConfig) {
 	for {
 		conn, err := listen.Accept()
@@ -180,6 +191,8 @@ func clientLoopSocks5(listen net.Listener, config ClientConfig) {
 	}
 }
 
+// clientSocks5Process grants authorization to SOCKS5 client, and parse destination addr and port from SOCKS5 CONNECT request,
+// which would be sent in Gproto message, and finally do the forwarding jobs
 func clientSocks5Process(clientConn net.Conn, config ClientConfig) {
 	if err := clientSocks5Auth(clientConn); err != nil {
 		//TODO log
@@ -219,7 +232,9 @@ func clientSocks5Process(clientConn net.Conn, config ClientConfig) {
 
 		clientCert := config.CertFile
 		clientKey := config.KeyFile
-		log.Println("Load key pairs - ", clientCert, clientKey)
+		if config.LogLevel >= Debug {
+			log.Println("Load key pairs - ", clientCert, clientKey)
+		}
 		certificate, err := tls.LoadX509KeyPair(clientCert, clientKey)
 		if err != nil {
 			log.Fatalf("could not load certificate: %v", err)
@@ -261,14 +276,17 @@ func clientSocks5Process(clientConn net.Conn, config ClientConfig) {
 		return
 	}
 
+	// read Gproto returned message from server
 	buffer := make([]byte, 4)
 	n, err := serverConn.Read(buffer)
 	if err != nil || n != 4 {
 		//TODO log
 		return
 	}
+
+	// if Gproto says the connection couldn't be established
 	if !bytes.Equal(buffer, []byte{0x86, 0x20, 0x20, 0x00}) {
-		//TODO log
+		//TODO log and proper handle
 		return
 	}
 
@@ -339,10 +357,12 @@ func clientSocks5Process(clientConn net.Conn, config ClientConfig) {
 	}
 }
 
+// clientSocks5Auth does the auth job of SOCKS5 proto,
+// currently Groxy doesn't support SOCKS5 auth, but can be easily added later
 func clientSocks5Auth(client net.Conn) (err error) {
 	buf := make([]byte, 256)
 
-	// 读取 VER 和 NMETHODS
+	// read VER and NMETHODS fields
 	n, err := io.ReadFull(client, buf[:2])
 	if n != 2 {
 		return errors.New("reading header: " + err.Error())
@@ -353,13 +373,13 @@ func clientSocks5Auth(client net.Conn) (err error) {
 		return errors.New("invalid version")
 	}
 
-	// 读取 METHODS 列表
+	// read METHODS list
 	n, err = io.ReadFull(client, buf[:nMethods])
 	if n != nMethods {
 		return errors.New("reading methods: " + err.Error())
 	}
 
-	//无需认证
+	// currently, groxy doesn't require any auth inside SOCKS5
 	n, err = client.Write([]byte{0x05, 0x00})
 	if n != 2 || err != nil {
 		return errors.New("write rsp: " + err.Error())
@@ -368,6 +388,7 @@ func clientSocks5Auth(client net.Conn) (err error) {
 	return nil
 }
 
+// clientSocks5ParseAddrPort parses addr and port from SOCKS5 CONNECT message sent from client
 func clientSocks5ParseAddrPort(client net.Conn) (string, error) {
 	buf := make([]byte, 256)
 
@@ -376,6 +397,7 @@ func clientSocks5ParseAddrPort(client net.Conn) (string, error) {
 		return "", errors.New("read header: " + err.Error())
 	}
 
+	// check ver and command field
 	ver, cmd, _, atyp := buf[0], buf[1], buf[2], buf[3]
 	if ver != 5 || cmd != 1 {
 		return "", errors.New("invalid ver/cmd")
@@ -403,8 +425,8 @@ func clientSocks5ParseAddrPort(client net.Conn) (string, error) {
 		}
 		addr = string(buf[:addrLen])
 
-	case 4: // no IPv6
-		return "", errors.New("IPv6: no supported yet")
+	case 4: // IPv6, not implemented yet
+		return "", errors.New("IPv6: not supported yet")
 
 	default:
 		return "", errors.New("invalid atyp")
@@ -418,6 +440,7 @@ func clientSocks5ParseAddrPort(client net.Conn) (string, error) {
 
 	destAddrPort := fmt.Sprintf("%s:%d", addr, port)
 
+	// return the message that connection has been established
 	n, err = client.Write([]byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 	if err != nil {
 		//TODO log
@@ -427,6 +450,7 @@ func clientSocks5ParseAddrPort(client net.Conn) (string, error) {
 	return destAddrPort, nil
 }
 
+// clientLoopHttp loops to accept HTTP proxy request
 func clientLoopHttp(listener net.Listener, config ClientConfig) {
 	for {
 		conn, err := listener.Accept()
@@ -441,6 +465,7 @@ func clientLoopHttp(listener net.Listener, config ClientConfig) {
 	}
 }
 
+// clientHttpProcess handles HTTP proxy request, which should use CONNECT method
 func clientHttpProcess(conn net.Conn, config ClientConfig) {
 	// 用来存放客户端数据的缓冲区
 	var b [1024]byte
@@ -453,13 +478,16 @@ func clientHttpProcess(conn net.Conn, config ClientConfig) {
 
 	var method, URL, address string
 	// 从客户端数据读入 method，url
-	fmt.Sscanf(string(b[:bytes.IndexByte(b[:], '\n')]), "%s%s", &method, &URL)
+	_, err = fmt.Sscanf(string(b[:bytes.IndexByte(b[:], '\n')]), "%s%s", &method, &URL)
+	if err != nil {
+
+		return
+	}
 	hostPortURL := (URL)
 
-	// 如果方法是 CONNECT，则为 https 协议
 	if method == "CONNECT" {
 		address = hostPortURL
-	} else { //否则为 http 协议
+	} else {
 		conn.Write([]byte("HTTP/1.0 405 Method Not Allowed"))
 		conn.Close()
 		return
@@ -553,6 +581,7 @@ func clientHttpProcess(conn net.Conn, config ClientConfig) {
 		return
 	}
 
+	// tell client that the proxy has been successfully set up
 	conn.Write([]byte("HTTP/1.0 200 Connection Established\r\n\r\n"))
 
 	relay := func(left, right net.Conn) error {
@@ -622,6 +651,7 @@ func clientHttpProcess(conn net.Conn, config ClientConfig) {
 	}
 }
 
+// ClientMain is the main entrance for client part, which is modified from Main func in previous version of groxy client
 func ClientMain() {
 	localAddr := flag.String("localAddr", "127.0.0.1", "Address that groxy will listen at")
 	remoteAddr := flag.String("remoteAddr", "127.0.0.1", "Address that groxy server at")
@@ -637,6 +667,7 @@ func ClientMain() {
 
 	flag.Parse()
 
+	// ensure IPv4 addr and port in config are all valid
 	if !IsValidIPv4Address(*localAddr) {
 		fmt.Printf("Incorrect IP address for localAddr: %s\nExpected: Valid IPv4 address", *localAddr)
 		return
@@ -683,14 +714,13 @@ func ClientMain() {
 		panic(err)
 	}
 
+	// dispatch to different Loop func according to mode set in config
 	if config.ClientMode == Raw {
 		clientLoopRaw(listener, config)
 	}
-
 	if config.ClientMode == Socks55 {
 		clientLoopSocks5(listener, config)
 	}
-
 	if config.ClientMode == HTTP {
 		clientLoopHttp(listener, config)
 	}
