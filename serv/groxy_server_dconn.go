@@ -32,16 +32,16 @@ some notes about differences between .key, .pem and .crt files
 func parseServerCArgs() *ServerConfig {
 	localAddr := flag.String("localAddr", "127.0.0.1", "Address that this groxy server will listen at")
 	localPort := flag.Int("localPort", 38620, "Port that this groxy server will listen on")
-	certFile := flag.String("cert", ".\\certs\\server.pem", "Certificate file that TLS requires, in PEM format")
-	keyFile := flag.String("key", ".\\certs\\server.key", "Key file for TLS encryption")
+	certFile := flag.String("cert", "./certs/server.pem", "Certificate file that TLS requires, in PEM format")
+	keyFile := flag.String("key", "./certs/server.key", "Key file for TLS encryption")
 	remoteAddr := flag.String("remoteAddr", "127.0.0.1", "Address that remote application exists")
 	remotePort := flag.Int("remotePort", 55590, "Port that remote application exists")
 	servLogLevel := *flag.Int("logLevel", 2, "Logging level from 0 (quite) to 2 (debug)")
 	isMTLS := flag.Bool("mtls", false, "Is mTLS enabled")
 	serverMode := flag.String("serverMode", "dynamic", "Server Mode (dynamic or legacy)")
-	caCert := flag.String("cacert", ".\\certs\\ca.crt", "CA cert used in mTLS mode")
+	caCert := flag.String("cacert", "./certs/ca.crt", "CA cert used in mTLS mode")
 	isKeyLoggerEnabled := flag.Bool("keyLogger", false, "Is key logger enabled (FOR AUDIT PURPOSE ONLY)")
-	keyLoggerPath := flag.String("keyloggerPath", ".\\TLS_KEY_LOG", "Key logger file path (FOR AUDIT PURPOSE ONLY)")
+	keyLoggerPath := flag.String("keyloggerPath", "./TLS_KEY_LOG", "Key logger file path (FOR AUDIT PURPOSE ONLY)")
 
 	flag.Parse()
 
@@ -100,7 +100,7 @@ func serverDconnInit(config ServerConfig) {
 		panic(err)
 	}
 
-	var tlsConf *tls.Config
+	var tlsConf tls.Config
 	tlsConf.MinVersion = tls.VersionTLS13 // set to TLS 1.3 according to the thesis
 
 	if config.IsMTLS {
@@ -112,7 +112,7 @@ func serverDconnInit(config ServerConfig) {
 		caCertPool := x509.NewCertPool()
 		caCertPool.AppendCertsFromPEM(caCertFile)
 
-		tlsConf = &tls.Config{
+		tlsConf = tls.Config{
 			Certificates: []tls.Certificate{cert},
 			ClientCAs:    caCertPool,
 			ClientAuth:   tls.RequireAndVerifyClientCert, // client MUST provide cert in mTLS mode
@@ -132,7 +132,7 @@ func serverDconnInit(config ServerConfig) {
 	}
 
 	// listen TLS connections on specific port and addr
-	clientListen, err := tls.Listen("tcp4", config.LocalAddr+":"+strconv.Itoa(config.LocalPort), tlsConf)
+	clientListen, err := tls.Listen("tcp4", config.LocalAddr+":"+strconv.Itoa(config.LocalPort), &tlsConf)
 	if err != nil {
 		panic("handleClient::failed to TLS listen: " + err.Error())
 	}

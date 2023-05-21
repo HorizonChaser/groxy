@@ -8,7 +8,7 @@ The server side and client side groxy will each expose one port for applications
 
 - [x] Implement TCP tunnel
 - [x] Support SOCKS5 proxy
-- [x] Support HTTP proxy (not likely to be implemented)
+- [x] Support HTTP proxy
 - [ ] Capture and forward all TCP traffic on client side
   - possibly implemented by using TUN device and route table hooking
 - [x] Use a connection pool to optimize performance
@@ -53,7 +53,6 @@ Usage of groxy_server:
         Address that remote application exists (default "127.0.0.1")
   -remotePort int
         Port that remote application exists (default 55590)
-  -v    Enable verbose output (default true)
 ```
 
 To be noticed that the certificate should be in `pem` format.
@@ -82,3 +81,5 @@ go build ./groxy_server.go ./common_def.go
 #Client side
 go build ./groxy_client.go ./common_def.go
 ```
+
+Pre-built executable binaries for Linux and Windows available in `./build/`.

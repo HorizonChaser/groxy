@@ -660,10 +660,10 @@ func ClientMain() {
 	insecureCertAllowed := flag.Bool("insecureCert", true, "Is insecure cert (self-signed cert) allowed on serverside")
 	clientLogLevel := *flag.Int("logLevel", 2, "Logging level from 0 (quite) to 2 (debug)")
 	isMTLS := flag.Bool("mtls", false, "Is mTLS enabled")
-	caCert := flag.String("cacert", ".\\certs\\ca.crt", "CA cert used in mTLS mode")
+	caCert := flag.String("cacert", "./certs/ca.crt", "CA cert used in mTLS mode")
 	clientMode := flag.String("clientMode", "raw", "Client listen-and-proxying mode (raw, socks5, http)")
-	cert := flag.String("cert", ".\\certs\\client.crt", "Cert that client holds in mTLS mode")
-	key := flag.String("key", ".\\certs\\client.key", "Key that client holds in mTLS mode")
+	cert := flag.String("cert", "./certs/client.crt", "Cert that client holds in mTLS mode")
+	key := flag.String("key", "./certs/client.key", "Key that client holds in mTLS mode")
 
 	flag.Parse()
 
