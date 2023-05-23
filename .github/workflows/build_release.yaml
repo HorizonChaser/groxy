@@ -37,10 +37,15 @@ jobs:
       - name: Build Groxy in Darwin x64
         run: CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -v -o ./simple_serv_darwin_x64 ./testSuites/simple_serv.go
 
+      - name: Generate release tag
+        id: tag
+        run: |
+          echo "::set-output name=release_tag::UserBuild_$(date +"%Y.%m.%d_%H-%M")"
+
       - name: Release
         uses: softprops/action-gh-release@v1
-        with: # 将下述可执行文件 release 上去
-          tag_name: rel
+        with: # 将下述可执行文件 release 上 去
+          tag_name: ${{ steps.tag.outputs.release_tag }}
           files: |
             groxy_linux_x64
             groxy_windows_x64.exe
