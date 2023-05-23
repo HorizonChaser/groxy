@@ -7,6 +7,8 @@ on:
     branches: [ "master" ]
   workflow_dispatch:
 
+permissions: read-all|write-all
+
 jobs:
 
   build_and_push:
@@ -40,7 +42,7 @@ jobs:
       - name: Generate release tag
         id: tag
         run: |
-          echo "::set-output name=release_tag::UserBuild_$(date +"%Y.%m.%d_%H-%M")"
+          echo "::set-output name=release_tag::Groxy_Build_$(date +"%Y.%m.%d_%H-%M")"
 
       - name: Release
         uses: softprops/action-gh-release@v1
