@@ -40,6 +40,7 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v1
         with: # 将下述可执行文件 release 上去
+          tag_name: rel
           files: |
             groxy_linux_x64
             groxy_windows_x64.exe
